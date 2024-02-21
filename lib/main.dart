@@ -1,125 +1,124 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 
 void main() {
-  runApp(const MyApp());
+  runApp(MyApp());
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Notes App',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        visualDensity: VisualDensity.adaptivePlatformDensity,
+    return ChangeNotifierProvider(
+      create: (context) => NotesProvider(),
+      child: MaterialApp(
+        title: 'Notes App',
+        theme: ThemeData(
+          primarySwatch: Colors.blue,
+          visualDensity: VisualDensity.adaptivePlatformDensity,
+        ),
+        home: NotesListScreen(),
       ),
-      home: const NotesListScreen(),
     );
   }
 }
 
-class NotesListScreen extends StatefulWidget {
-  const NotesListScreen({super.key});
-
-  @override
-  _NotesListScreenState createState() => _NotesListScreenState();
-}
-
-class _NotesListScreenState extends State<NotesListScreen> {
+class NotesProvider extends ChangeNotifier {
   List<Note> _notes = [];
 
-  @override
-  void initState() {
-    super.initState();
-    _loadNotes();
-  }
+  List<Note> get notes => _notes;
 
-  Future<void> _loadNotes() async {
+  Future<void> loadNotes() async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     final List<String>? notesJson = prefs.getStringList('notes');
 
     if (notesJson != null) {
-      setState(() {
-        _notes = notesJson.map((noteJson) => Note.fromJson(noteJson)).toList();
-      });
+      _notes = notesJson.map((noteJson) => Note.fromJson(noteJson)).toList();
+      notifyListeners();
     }
   }
 
-  Future<void> _saveNotes() async {
+  Future<void> saveNotes() async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     final List<String> notesJson = _notes.map((note) => note.toJson()).toList();
     await prefs.setStringList('notes', notesJson);
+    notifyListeners();
   }
 
-  void _addNote() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => const AddEditNoteScreen()),
-    ).then((newNote) {
-      if (newNote != null) {
-        setState(() {
-          _notes.add(newNote);
-        });
-        _saveNotes();
-      }
-    });
+  void addNote(Note note) {
+    _notes.add(note);
+    saveNotes();
   }
 
-  void _editNote(Note note) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => AddEditNoteScreen(note: note)),
-    ).then((editedNote) {
-      if (editedNote != null) {
-        setState(() {
-          _notes[_notes.indexWhere((n) => n.id == editedNote.id)] = editedNote;
-        });
-        _saveNotes();
-      }
-    });
+  void editNote(Note editedNote) {
+    final index = _notes.indexWhere((n) => n.id == editedNote.id);
+    if (index != -1) {
+      _notes[index] = editedNote;
+      saveNotes();
+    }
   }
 
-  void _deleteNote(Note note) {
-    setState(() {
-      _notes.removeWhere((n) => n.id == note.id);
-    });
-    _saveNotes();
+  void deleteNote(Note note) {
+    _notes.removeWhere((n) => n.id == note.id);
+    saveNotes();
   }
+}
 
+class NotesListScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Notes'),
+        title: Text('Notes'),
       ),
-      body: ListView.builder(
-        itemCount: _notes.length,
-        itemBuilder: (context, index) {
-          final note = _notes[index];
-          return ListTile(
-            title: Text(note.title),
-            subtitle: Text(note.content),
-            onTap: () => _editNote(note),
-            onLongPress: () => _deleteNote(note),
+      body: Consumer<NotesProvider>(
+        builder: (context, notesProvider, child) {
+          final notes = notesProvider.notes;
+          return ListView.builder(
+            itemCount: notes.length,
+            itemBuilder: (context, index) {
+              final note = notes[index];
+              return ListTile(
+                title: Text(note.title),
+                subtitle: Text(note.content),
+                onTap: () => _editNote(context, note),
+                onLongPress: () => _deleteNote(context, note),
+              );
+            },
           );
         },
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _addNote,
-        child: const Icon(Icons.add),
+        onPressed: () => _addNote(context),
+        child: Icon(Icons.add),
       ),
     );
+  }
+
+  void _addNote(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => AddEditNoteScreen()),
+    );
+  }
+
+  void _editNote(BuildContext context, Note note) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => AddEditNoteScreen(note: note)),
+    );
+  }
+
+  void _deleteNote(BuildContext context, Note note) {
+    Provider.of<NotesProvider>(context, listen: false).deleteNote(note);
   }
 }
 
 class AddEditNoteScreen extends StatefulWidget {
   final Note? note;
 
-  const AddEditNoteScreen({Key? key, this.note}) : super(key: key);
+  AddEditNoteScreen({Key? key, this.note}) : super(key: key);
 
   @override
   _AddEditNoteScreenState createState() => _AddEditNoteScreenState();
@@ -150,30 +149,39 @@ class _AddEditNoteScreenState extends State<AddEditNoteScreen> {
           children: [
             TextField(
               controller: _titleController,
-              decoration: const InputDecoration(labelText: 'Title'),
+              decoration: InputDecoration(labelText: 'Title'),
             ),
-            const SizedBox(height: 16.0),
+            SizedBox(height: 16.0),
             TextField(
               controller: _contentController,
-              decoration: const InputDecoration(labelText: 'Content'),
+              decoration: InputDecoration(labelText: 'Content'),
               maxLines: null,
             ),
-            const SizedBox(height: 16.0),
+            SizedBox(height: 16.0),
             ElevatedButton(
-              onPressed: () {
-                final newNote = Note(
-                  id: widget.note?.id ?? DateTime.now().millisecondsSinceEpoch,
-                  title: _titleController.text,
-                  content: _contentController.text,
-                );
-                Navigator.pop(context, newNote);
-              },
-              child: const Text('Save'),
+              onPressed: () => _saveNote(context),
+              child: Text('Save'),
             ),
           ],
         ),
       ),
     );
+  }
+
+  void _saveNote(BuildContext context) {
+    final newNote = Note(
+      id: widget.note?.id ?? DateTime.now().millisecondsSinceEpoch,
+      title: _titleController.text,
+      content: _contentController.text,
+    );
+
+    if (widget.note == null) {
+      Provider.of<NotesProvider>(context, listen: false).addNote(newNote);
+    } else {
+      Provider.of<NotesProvider>(context, listen: false).editNote(newNote);
+    }
+
+    Navigator.pop(context);
   }
 
   @override
