@@ -1,222 +1,268 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:convert';
 
 void main() {
-  runApp(MyApp());
+  runApp(
+    ChangeNotifierProvider(
+      create: (context) => NotaProvider(),
+      child: MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (context) => NotesProvider(),
-      child: MaterialApp(
-        title: 'Notes App',
-        theme: ThemeData(
-          primarySwatch: Colors.blue,
-          visualDensity: VisualDensity.adaptivePlatformDensity,
-        ),
-        home: NotesListScreen(),
+    return MaterialApp(
+      title: 'Notes',
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
       ),
+      home: PaginaPrincipal(),
     );
   }
 }
 
-class NotesProvider extends ChangeNotifier {
-  List<Note> _notes = [];
-
-  List<Note> get notes => _notes;
-
-  Future<void> loadNotes() async {
-    final SharedPreferences prefs = await SharedPreferences.getInstance();
-    final List<String>? notesJson = prefs.getStringList('notes');
-
-    if (notesJson != null) {
-      _notes = notesJson.map((noteJson) => Note.fromJson(noteJson)).toList();
-      notifyListeners();
-    }
-  }
-
-  Future<void> saveNotes() async {
-    final SharedPreferences prefs = await SharedPreferences.getInstance();
-    final List<String> notesJson = _notes.map((note) => note.toJson()).toList();
-    await prefs.setStringList('notes', notesJson);
-    notifyListeners();
-  }
-
-  void addNote(Note note) {
-    _notes.add(note);
-    saveNotes();
-  }
-
-  void editNote(Note editedNote) {
-    final index = _notes.indexWhere((n) => n.id == editedNote.id);
-    if (index != -1) {
-      _notes[index] = editedNote;
-      saveNotes();
-    }
-  }
-
-  void deleteNote(Note note) {
-    _notes.removeWhere((n) => n.id == note.id);
-    saveNotes();
-  }
-}
-
-class NotesListScreen extends StatelessWidget {
+class PaginaPrincipal extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text('Notes'),
       ),
-      body: Consumer<NotesProvider>(
-        builder: (context, notesProvider, child) {
-          final notes = notesProvider.notes;
+      body: Consumer<NotaProvider>(
+        builder: (context, notaProvider, child) {
           return ListView.builder(
-            itemCount: notes.length,
+            itemCount: notaProvider.notes.length,
             itemBuilder: (context, index) {
-              final note = notes[index];
               return ListTile(
-                title: Text(note.title),
-                subtitle: Text(note.content),
-                onTap: () => _editNote(context, note),
-                onLongPress: () => _deleteNote(context, note),
+                title: Text(notaProvider.notes[index].titol),
+                subtitle: Text(
+                  notaProvider.notes[index].descripcio,
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => PaginaEditarNota(nota: notaProvider.notes[index])),
+                  );
+                },
               );
             },
           );
         },
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => _addNote(context),
         child: Icon(Icons.add),
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => PaginaAfegirNota()),
+          );
+        },
       ),
     );
   }
-
-  void _addNote(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => AddEditNoteScreen()),
-    );
-  }
-
-  void _editNote(BuildContext context, Note note) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => AddEditNoteScreen(note: note)),
-    );
-  }
-
-  void _deleteNote(BuildContext context, Note note) {
-    Provider.of<NotesProvider>(context, listen: false).deleteNote(note);
-  }
 }
 
-class AddEditNoteScreen extends StatefulWidget {
-  final Note? note;
-
-  AddEditNoteScreen({Key? key, this.note}) : super(key: key);
-
+class PaginaAfegirNota extends StatefulWidget {
   @override
-  _AddEditNoteScreenState createState() => _AddEditNoteScreenState();
+  _PaginaAfegirNotaState createState() => _PaginaAfegirNotaState();
 }
 
-class _AddEditNoteScreenState extends State<AddEditNoteScreen> {
-  late TextEditingController _titleController;
-  late TextEditingController _contentController;
+class _PaginaAfegirNotaState extends State<PaginaAfegirNota> {
+  final _titolController = TextEditingController();
+  final _descripcioController = TextEditingController();
 
   @override
-  void initState() {
-    super.initState();
-    _titleController = TextEditingController(text: widget.note?.title ?? '');
-    _contentController =
-        TextEditingController(text: widget.note?.content ?? '');
+  void dispose() {
+    _titolController.dispose();
+    _descripcioController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.note == null ? 'Add Note' : 'Edit Note'),
+        title: Text('Afegir Nota'),
       ),
       body: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(8.0),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
+          children: <Widget>[
             TextField(
-              controller: _titleController,
-              decoration: InputDecoration(labelText: 'Title'),
+              controller: _titolController,
+              decoration: InputDecoration(labelText: 'Titol'),
             ),
-            SizedBox(height: 16.0),
             TextField(
-              controller: _contentController,
-              decoration: InputDecoration(labelText: 'Content'),
-              maxLines: null,
+              controller: _descripcioController,
+              decoration: InputDecoration(labelText: 'Descripcio'),
             ),
-            SizedBox(height: 16.0),
-            ElevatedButton(
-              onPressed: () => _saveNote(context),
-              child: Text('Save'),
-            ),
+            Padding(
+              padding: EdgeInsets.only(top: 20.0),
+                child: ElevatedButton(
+                  child: Text('Afegir Nota'),
+                  onPressed: () {
+                    if (_titolController.text.isNotEmpty) {
+                      var nota = Nota(titol: _titolController.text, descripcio: _descripcioController.text);
+                      Provider.of<NotaProvider>(context, listen: false).afegirNotes(nota);
+                      Navigator.pop(context);
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('El titol ha de ser obligatori'),
+                        ),
+                      );
+                    }
+                  },
+                ),
+              )
           ],
         ),
       ),
     );
   }
+}
 
-  void _saveNote(BuildContext context) {
-    final newNote = Note(
-      id: widget.note?.id ?? DateTime.now().millisecondsSinceEpoch,
-      title: _titleController.text,
-      content: _contentController.text,
-    );
+class PaginaEditarNota extends StatefulWidget {
+  final Nota nota;
 
-    if (widget.note == null) {
-      Provider.of<NotesProvider>(context, listen: false).addNote(newNote);
-    } else {
-      Provider.of<NotesProvider>(context, listen: false).editNote(newNote);
-    }
+  PaginaEditarNota({required this.nota});
 
-    Navigator.pop(context);
+  @override
+  _PaginaEditarNotaState createState() => _PaginaEditarNotaState();
+}
+
+class _PaginaEditarNotaState extends State<PaginaEditarNota> {
+  late TextEditingController _titolController;
+  late TextEditingController _descripcioController;
+
+  @override
+  void initState() {
+    super.initState();
+    _titolController = TextEditingController(text: widget.nota.titol);
+    _descripcioController = TextEditingController(text: widget.nota.descripcio);
   }
 
   @override
   void dispose() {
-    _titleController.dispose();
-    _contentController.dispose();
+    _titolController.dispose();
+    _descripcioController.dispose();
     super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Editar nota'),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: Column(
+          children: <Widget>[
+            TextField(
+              controller: _titolController,
+              decoration: InputDecoration(labelText: 'Titol'),
+            ),
+            TextField(
+              controller: _descripcioController,
+              decoration: InputDecoration(labelText: 'Descripcio'),
+            ),
+            Padding(
+              padding: EdgeInsets.only(top: 20.0),
+              child: ElevatedButton(
+                child: Text('Actualitzar nota'),
+                onPressed: () {
+                  if (_titolController.text.isNotEmpty) {
+                    var nota = Nota(titol: _titolController.text, descripcio: _descripcioController.text);
+                    Provider.of<NotaProvider>(context, listen: false).eliminarNotes(widget.nota);
+                    Provider.of<NotaProvider>(context, listen: false).afegirNotes(nota);
+                    Navigator.pop(context);
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('El titol ha de ser obligatori'),
+                      ),
+                    );
+                  }
+                },
+              ),
+            )
+          ],
+        ),
+      ),
+      floatingActionButton: FloatingActionButton(
+        child: Icon(Icons.delete),
+        onPressed: () {
+          Provider.of<NotaProvider>(context, listen: false).eliminarNotes(widget.nota);
+          Navigator.pop(context);
+        },
+      ),
+    );
   }
 }
 
-class Note {
-  final int id;
-  final String title;
-  final String content;
 
-  Note({
-    required this.id,
-    required this.title,
-    required this.content,
-  });
+class Nota {
+  String titol;
+  String descripcio;
 
-  factory Note.fromJson(String json) {
-    final map = Map<String, dynamic>.from(jsonDecode(json));
-    return Note(
-      id: map['id'],
-      title: map['title'],
-      content: map['content'],
-    );
+  Nota({required this.titol, this.descripcio = ''});
+
+  Map<String, dynamic> toMap() {
+    return {
+      'titol': titol,
+      'descripcio': descripcio,
+    };
   }
 
-  String toJson() {
-    return jsonEncode({
-      'id': id,
-      'title': title,
-      'content': content,
-    });
+  factory Nota.fromMap(Map<String, dynamic> map) {
+    return Nota(
+      titol: map['titol'],
+      descripcio: map['descripcio'],
+    );
+  }
+}
+
+
+class NotaProvider extends ChangeNotifier {
+  List<Nota> _notes = [];
+
+  List<Nota> get notes => _notes;
+
+  NotaProvider() {
+    carregarNotes();
+  }
+
+  void afegirNotes(Nota nota) {
+    _notes.add(nota);
+    guardarNotes();
+    notifyListeners();
+  }
+
+  void eliminarNotes(Nota nota) {
+    _notes.remove(nota);
+    guardarNotes();
+    notifyListeners();
+  }
+
+  Future<void> guardarNotes() async {
+    final prefs = await SharedPreferences.getInstance();
+    List<String> stringNotes = _notes.map((nota) => jsonEncode(nota.toMap())).toList();
+    await prefs.setStringList('notes', stringNotes);
+  }
+
+  Future<void> carregarNotes() async {
+    final prefs = await SharedPreferences.getInstance();
+    List<String>? stringNotes = prefs.getStringList('notes');
+    if (stringNotes != null) {
+      _notes = stringNotes.map((nota) => Nota.fromMap(jsonDecode(nota))).toList();
+      notifyListeners();
+    }
   }
 }
